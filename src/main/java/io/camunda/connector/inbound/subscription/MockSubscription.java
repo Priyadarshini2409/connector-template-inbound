@@ -1,52 +1,53 @@
+
 package io.camunda.connector.inbound.subscription;
 
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class MockSubscription {
-  private static final Logger LOG = LoggerFactory.getLogger(MockSubscription.class);
-  private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-  private final EventGenerator generator;
+import java.nio.file.*;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
-  public MockSubscription(
-      String sender, int messagesPerMinute, Consumer<MockSubscriptionEvent> callback) {
-    LOG.info("Activating mock subscription");
-    generator = new EventGenerator(sender);
-    executor.scheduleAtFixedRate(
-        () -> produceEvent(callback), 5, 60 / messagesPerMinute, TimeUnit.SECONDS);
-  }
+public class WatchServiceSubscription {
 
-  public void stop() {
-    LOG.info("Deactivating mock subscription");
-    executor.shutdownNow();
-  }
+    private final static Logger LOG = LoggerFactory.getLogger(WatchServiceSubscription.class);
 
-  private void produceEvent(Consumer<MockSubscriptionEvent> callback) {
-    MockSubscriptionEvent event = generator.getRandomEvent();
-    LOG.info("Emulating subscription event: " + event);
-    callback.accept(event);
-  }
 
-  private static class EventGenerator {
-    private final String sender;
+    public WatchServiceSubscription(String eventToMonitor, String directory, String pollingInterval, Consumer<WatchServiceSubscriptionEvent> callback) {
+        LOG.info("Activating WatcherService subscription");
+        // listen to directory
+        try {
+            WatchService watchService = FileSystems.getDefault().newWatchService();
+            Path path = Paths.get(directory);
 
-    EventGenerator(String sender) {
-      this.sender = sender;
+            WatchKey watchKey = path.register(watchService, new WatchEvent.Kind[]{StandardWatchEventKinds.ENTRY_DELETE, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY});
+
+            boolean isWatchKeyValid = true;
+
+            while (isWatchKeyValid) {
+                watchKey = watchService.poll(Long.parseLong(pollingInterval), TimeUnit.SECONDS);
+                if(watchKey != null) {
+                    for (WatchEvent<?> event : watchKey.pollEvents()) {
+                        LOG.info("Event kind : " + event.kind() + " - File : " + event.context() + " event to monitor: "+ eventToMonitor);
+                        if(event.kind().toString().equals(eventToMonitor)) {
+                            WatchServiceSubscriptionEvent wsse = new WatchServiceSubscriptionEvent(eventToMonitor, directory, event.context().toString());
+                            callback.accept(wsse);
+                        }
+                    }
+                    watchKey.reset();
+
+                } else {
+                    LOG.info("No files during interval");
+                }
+            }
+
+        } catch (Exception e) {
+            LOG.error("Problem with connector "+e);
+        }
     }
 
-    private final Random random = new Random();
-
-    public MockSubscriptionEvent getRandomEvent() {
-      int MAX_CODE = 10;
-      int code = random.nextInt(MAX_CODE);
-      String message = UUID.randomUUID().toString();
-      return new MockSubscriptionEvent(sender, code, message);
+    public void stop() {
+        LOG.info("Deactivating file watcher service");
     }
-  }
-}
+
+} 
