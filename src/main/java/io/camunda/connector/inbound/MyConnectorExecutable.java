@@ -6,7 +6,7 @@ import io.camunda.connector.api.inbound.InboundConnectorExecutable;
 import io.camunda.connector.inbound.subscription.MockSubscription;
 import io.camunda.connector.inbound.subscription.MockSubscriptionEvent;
 
-@InboundConnector(name = "My Inbound Connector", type = "io.camunda:my-inbound-connector:1")
+@InboundConnector(name = "Watch Service Inbound Connector", type = "io.camunda:watchserviceinbound:1")
 public class MyConnectorExecutable implements InboundConnectorExecutable<InboundConnectorContext> {
 
   private MockSubscription subscription;
